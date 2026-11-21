@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arrival Baggage Bay - Board System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@700&display=swap');
+        
+        :root {
+            --primary: #0f172a;
+            --accent: #facc15;
+            --live: #ef4444;
+            --google-green: #81c995;
+            --google-card-bg: #202124;
+            --cyan-glow: #06b6d4;
+            --emerald-glow: #10b981;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0b0f19;
+            color: #f1f5f9;
+        }
+
+        .digital-clock {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            text-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+        }
+
+        .fids-table thead th {
+            background-color: #1e293b;
+            color: #94a3b8;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+            padding: 14px 16px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .status-active { background-color: #dcfce7; color: #166534; }
+        .status-waiting { background-color: #1e293b; color: #94a3b8; }
+        .status-process { background-color: #fef3c7; color: #92400e; }
+
+        .live-row {
+            background-color: rgba(239, 68, 68, 0.05) !important;
+            border-left: 4px solid var(--live) !important;
+            position: relative;
+        }
+
+        .live-tag {
+            background-color: var(--live);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            animation: pulse-live 1.5s infinite;
+        }
+
+        @keyframes pulse-live {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.05); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .busy-indicator {
+            color: #f97316;
+            animation: pulse-fire 1.5s infinite;
+        }
+
+        @keyframes pulse-fire {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        #refresh-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: #3b82f6;
+            width: 0%;
+            transition: width 1s linear;
+        }
+
+        .modal-blur {
+            background-color: rgba(11, 15, 25, 0.85);
+            backdrop-filter: blur(12px);
+        }
+
+        @media (max-width: 768px) {
+            .mobile-card {
+                background: #1e293b;
+                margin-bottom: 8px;
+                padding: 16px;
+                border-radius: 16px;
+                box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+                border: 1px solid #334155;
+            }
+        }
+
+        .btn-icon-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .btn-icon-label {
+            font-size: 10px;
+            font-weight: 800;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-top: 6px;
+            text-align: center;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .photo-preview {
+            width: 100%;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-10">
+
+    <header class="bg-[#0f172a] text-white sticky top-0 z-50 border-b border-slate-800 shadow-2xl">
+        <div id="refresh-progress"></div>
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-blue-600 p-2.5 rounded-xl shadow-lg">
+                            <i class="fas fa-plane-arrival text-lg text-white"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-sm md:text-xl font-extrabold uppercase tracking-widest text-blue-400">Arrival Baggage Bay</h1>
+                            <div id="currentDate" class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5"></div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div id="digitalClock" class="digital-clock text-xl md:text-2xl leading-none">00:00</div>
+                        <p class="text-[8px] text-blue-400 font-bold uppercase tracking-widest mt-1"><i class="fas fa-satellite-dish"></i> FIDS Board Active</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <div class="relative flex-grow">
+                        <input type="text" id="searchInput" 
+                            placeholder="Cari Flight, Asal, atau Stand di Papan..." 
+                            class="w-full pl-10 pr-12 py-3 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none placeholder-slate-500">
+                        <i class="fas fa-search absolute left-4 top-4 text-slate-500 text-xs"></i>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button onclick="manualRefresh()" class="bg-slate-800 hover:bg-slate-700 p-3.5 rounded-xl transition-all active:scale-95 border border-slate-700" title="Refresh Board">
+                            <i id="syncIcon" class="fas fa-sync-alt text-white text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6">
+        <!-- Dashboard Stats -->
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <div class="glass-panel p-4 rounded-2xl shadow-sm border border-slate-800">
+                <div class="text-slate-500 text-[9px] font-bold uppercase tracking-widest mb-1 text-center">Total Kedatangan</div>
+                <div id="statTotal" class="text-2xl font-black text-center text-white">0</div>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl shadow-sm border border-slate-800">
+                <div class="text-green-400 text-[9px] font-bold uppercase tracking-widest mb-1 text-center">Status Belt</div>
+                <div id="statLanded" class="text-2xl font-black text-center text-green-400">0</div>
+            </div>
+            <div class="col-span-2 lg:col-span-1 glass-panel p-4 rounded-2xl shadow-sm border border-slate-800 flex flex-col justify-center items-center text-center">
+                <p class="text-[8px] font-bold text-slate-500 uppercase mb-1">Pembaruan Terakhir</p>
+                <div id="lastSync" class="text-xs font-bold text-slate-300">--:--</div>
+            </div>
+        </div>
+
+        <!-- Section: Flight Board -->
+        <section class="mb-6">
+            <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center gap-2">
+                    <div class="bg-blue-600 text-white p-1.5 rounded-lg shadow-md">
+                        <i class="fas fa-list text-xs"></i>
+                    </div>
+                    <h2 class="text-xs md:text-sm font-extrabold uppercase tracking-widest text-slate-300">Papan Penerbangan Utama</h2>
+                </div>
+                <button onclick="toggleFlightsBoard()" id="toggleBoardBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 w-8 h-8 rounded-full flex items-center justify-center transition-all border border-slate-700 active:scale-90" title="Sembunyikan / Tampilkan Papan">
+                    <i id="toggleBoardIcon" class="fas fa-chevron-up text-xs"></i>
+                </button>
+            </div>
+
+            <div id="mainContent" class="bg-slate-900 md:rounded-3xl shadow-xl border border-slate-800 overflow-hidden min-h-[300px] transition-all duration-300">
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-800 text-slate-400 border-b border-slate-700">
+                            <tr class="text-xs font-bold uppercase">
+                                <th class="w-32 px-6 py-4">AIBT (Jadwal)</th>
+                                <th>No. Penerbangan</th>
+                                <th>Asal</th>
+                                <th class="text-center">Stand</th>
+                                <th class="text-center">BCB No</th>
+                                <th class="text-center">Status Laporan</th>
+                                <th>Remarks / Sumber</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+                <div id="mobileCards" class="md:hidden p-3 bg-slate-950 flex flex-col gap-2"></div>
+                <div id="loader" class="p-20 text-center">
+                    <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent mb-4"></div>
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest">Memuat database penerbangan...</p>
+                </div>
+                <div id="emptyState" class="hidden py-20 text-center">
+                    <i class="fas fa-database text-3xl text-slate-700 mb-4"></i>
+                    <h3 class="font-bold text-slate-500">Papan Kosong. Silakan sinkronisasikan ulang untuk memuat data terbaru.</h3>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-8">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-2">
+                    <div class="bg-indigo-600 text-white p-1.5 rounded-lg shadow-md">
+                        <i class="fas fa-history text-xs"></i>
+                    </div>
+                    <h2 class="text-xs md:text-sm font-extrabold uppercase tracking-widest text-slate-300">Riwayat Laporan Hari Ini (Real-Time)</h2>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 md:rounded-3xl shadow-xl border border-slate-800 overflow-hidden min-h-[150px]">
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-800 border-b border-slate-700 text-slate-400">
+                            <tr>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">Waktu Simpan</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">Flight</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">Stand</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">BCB</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">AIBT</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">FIBAG</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">LASTBAG</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider">Bukti Foto</th>
+                                <th class="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTbody" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+                <div id="mobileHistoryCards" class="md:hidden p-3 bg-slate-950 flex flex-col gap-2"></div>
+                <div id="historyEmptyState" class="p-10 text-center text-slate-500 text-xs">
+                    <i class="fas fa-clipboard-list text-2xl mb-2 text-slate-700"></i>
+                    <p>Belum ada laporan yang disalin/disimpan hari ini.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="reportModal" class="hidden fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 modal-blur">
+        <div class="bg-slate-900 w-full max-w-2xl rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden border border-slate-800">
+            <div class="bg-slate-950 p-5 flex justify-between items-center text-white border-b border-slate-800">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-file-alt text-blue-400"></i>
+                    <h2 id="modalTitle" class="font-black uppercase text-[10px] tracking-widest text-slate-200">Editor Laporan</h2>
+                </div>
+                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-white transition-all active:scale-90">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="flex flex-col overflow-y-auto">
+                <div class="w-full p-6 space-y-5 bg-slate-900">
+                    <!-- INPUT FORM COLUMNS: STAND & BCB -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Parking Stand</label>
+                            <input type="text" id="inStand" oninput="updateReport()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm font-bold text-emerald-400 focus:border-blue-500 outline-none uppercase">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">BCB No (Belt)</label>
+                            <input type="text" id="inBcb" oninput="updateReport()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm font-bold text-yellow-400 focus:border-blue-500 outline-none uppercase">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Nama Petugas</label>
+                            <input type="text" id="inOfficer" oninput="updateReport()" value="NURUL HIDAYAT" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-blue-500 text-white outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Area Kerja</label>
+                            <input type="text" id="inArea" oninput="updateReport()" value="T3 CGK-International" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-blue-500 text-white outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Ground Handling</label>
+                        <input type="text" id="inGH" placeholder="Misal: GAPURA, JAS" oninput="updateReport()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-blue-500 text-white outline-none uppercase">
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <!-- AIBT Input -->
+                        <div>
+                            <label class="block text-[10px] font-black text-cyan-400 uppercase mb-1">Jam AIBT</label>
+                            <div class="flex gap-1.5">
+                                <input type="time" id="inAibt" oninput="updateReport()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs outline-none focus:border-cyan-500 text-white">
+                                <button type="button" onclick="setNowTime('inAibt')" class="bg-cyan-600 hover:bg-cyan-500 text-white px-2.5 rounded-xl flex items-center justify-center transition-all active:scale-95">
+                                    <i class="fas fa-clock text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- FIBAG Input -->
+                        <div>
+                            <label class="flex justify-between items-center text-[10px] font-black text-emerald-400 uppercase mb-1">
+                                <span>Jam FIBAG</span>
+                                <span id="uiStatusFibag"></span>
+                            </label>
+                            <div class="flex gap-1.5 mb-1">
+                                <input type="time" id="inFibag" oninput="updateReport()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs outline-none focus:border-emerald-500 text-white">
+                                <button type="button" onclick="setNowTime('inFibag')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 rounded-xl flex items-center justify-center transition-all active:scale-95">
+                                    <i class="fas fa-clock text-xs"></i>
+                                </button>
+                                <button type="button" onclick="document.getElementById('fibagFileInput').click()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 rounded-xl flex items-center justify-center border border-slate-700 active:scale-95 transition-all" title="Ambil Foto">
+                                    <i class="fas fa-camera text-xs"></i>
+                                </button>
+                                <input type="file" id="fibagFileInput" class="hidden" accept="image/*" onchange="compressAndUploadPhoto(this, 'fibag')">
+                            </div>
+                            <div class="relative group">
+                                <img id="prevFibag" class="photo-preview hidden">
+                                <button id="btnDelFibag" onclick="clearPhoto('fibag')" class="hidden absolute top-1.5 right-1.5 bg-red-600 text-white text-[8px] p-1 rounded-full"><i class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- LASTBAG Input -->
+                        <div>
+                            <label class="flex justify-between items-center text-[10px] font-black text-indigo-400 uppercase mb-1">
+                                <span>Jam LASTBAG</span>
+                                <span id="uiStatusLabag"></span>
+                            </label>
+                            <div class="flex gap-1.5 mb-1">
+                                <input type="time" id="inLabag" oninput="updateReport()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs outline-none focus:border-indigo-500 text-white">
+                                <button type="button" onclick="setNowTime('inLabag')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 rounded-xl flex items-center justify-center transition-all active:scale-95">
+                                    <i class="fas fa-clock text-xs"></i>
+                                </button>
+                                <button type="button" onclick="document.getElementById('labagFileInput').click()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 rounded-xl flex items-center justify-center border border-slate-700 active:scale-95 transition-all" title="Ambil Foto">
+                                    <i class="fas fa-camera text-xs"></i>
+                                </button>
+                                <input type="file" id="labagFileInput" class="hidden" accept="image/*" onchange="compressAndUploadPhoto(this, 'labag')">
+                            </div>
+                            <div class="relative group">
+                                <img id="prevLabag" class="photo-preview hidden">
+                                <button id="btnDelLabag" onclick="clearPhoto('labag')" class="hidden absolute top-1.5 right-1.5 bg-red-600 text-white text-[8px] p-1 rounded-full"><i class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Reason (Jika Not Achieve)</label>
+                        <select id="inReason" onchange="updateReport()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm focus:border-blue-500 text-white outline-none">
+                            <option value="">-- Pilih Reason --</option>
+                            <option value="Data telat tampil">Data telat tampil</option>
+                            <option value="Man power">Man power</option>
+                            <option value="Clearance & special check">Clearance & special check</option>
+                            <option value="Weather">Weather</option>
+                            <option value="Equipment">Equipment</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- Footer Buttons -->
+            <div class="p-6 border-t border-slate-800 flex flex-wrap justify-center items-center gap-4 bg-slate-900">
+                <div class="btn-icon-container">
+                    <button onclick="saveData(false)" class="w-11 h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all text-sm"><i class="fas fa-save"></i></button>
+                    <span class="btn-icon-label">Simpan</span>
+                </div>
+                <div class="btn-icon-container">
+                    <button onclick="saveData(true)" class="w-11 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all text-sm"><i class="fas fa-copy"></i></button>
+                    <span class="btn-icon-label">Copy Teks</span>
+                </div>
+                <div class="btn-icon-container">
+                    <button onclick="shareDirectlyToSystem()" class="w-11 h-11 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all text-sm"><i class="fas fa-share-nodes text-sm"></i></button>
+                    <span class="btn-icon-label">Share HP<br>(Foto+Teks)</span>
+                </div>
+                <div class="btn-icon-container">
+                    <button onclick="closeModal()" class="w-11 h-11 bg-slate-800 text-slate-400 rounded-full flex items-center justify-center border border-slate-700 active:scale-90 transition-all text-sm"><i class="fas fa-times"></i></button>
+                    <span class="btn-icon-label">Batal</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="groundingModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4 modal-blur">
+        <div class="bg-slate-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-800">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-700 p-5 flex justify-between items-center text-white border-b border-slate-800">
+                <div class="flex items-center gap-2.5">
+                    <i class="fab fa-google text-lg text-emerald-400"></i>
+                    <h3 class="font-black uppercase text-xs tracking-widest">Google Grounding Lookup</h3>
+                </div>
+                <button onclick="closeGroundingSearch()" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-800 text-white transition-all active:scale-90">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-slate-400 text-[10px] leading-relaxed uppercase font-black">Cari data penerbangan CGK secara langsung di Google untuk akurasi data real-time.</p>
+                <div class="flex gap-2">
+                    <input type="text" id="groundingFlightQuery" placeholder="Contoh: GA 821 atau SQ956" class="w-full border border-slate-800 bg-slate-950 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 text-white outline-none font-bold uppercase">
+                    <button onclick="runGlobalGoogleGrounding()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 rounded-xl transition-all font-bold text-xs active:scale-95 flex items-center gap-1.5 shadow-md">
+                        <i class="fas fa-search"></i> Grounding
+                    </button>
+                </div>
+                <div id="groundingResultArea" class="hidden border border-slate-800 rounded-2xl p-4 bg-slate-950/60 space-y-4">
+                    <!-- Dynamic Output Grounding -->
+                </div>
+                <div id="groundingLoader" class="hidden py-8 text-center">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent mb-3"></div>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Grounding Search & AI Google Sync...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="lightbox" class="hidden fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 cursor-pointer" onclick="this.classList.add('hidden')">
+        <img id="lightboxImg" class="max-w-full max-h-full rounded-xl shadow-2xl border border-slate-800">
+    </div>
+
+    <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 bg-slate-900 border border-blue-800 text-white px-8 py-3 rounded-full text-xs font-black uppercase tracking-widest opacity-0 transition-opacity z-[200] pointer-events-none shadow-2xl">Disalin!</div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        let firebaseConfig;
+        try {
+            firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null;
+        } catch (e) {
+            console.error("Gagal melakukan parse __firebase_config:", e);
+        }
+
+        if (!firebaseConfig) {
+            firebaseConfig = {
+                apiKey: "mock-key",
+                authDomain: "mock-domain.firebaseapp.com",
+                projectId: "mock-project",
+                storageBucket: "mock-project.appspot.com",
+                messagingSenderId: "12345",
+                appId: "1:12345:web:mock"
+            };
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        const REFRESH_RATE = 120;
+        const BUSY_LIMIT = 3;
+        const SHEET_ID = '1U9IUqyG6-oNUsbH6WX9ZhEwjKhwNhfgu6-J8267MdqQ';
+        const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+
+        let allData = [
+            // Garuda Indonesia (Internasional)
+            { id: 1, time: "00:35", flight: "GA 895", origin: "Shanghai (PVG)", stand: "G4", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 2, time: "01:15", flight: "GA 885", origin: "Tokyo Narita (NRT)", stand: "G2", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 3, time: "05:30", flight: "GA 891", origin: "Beijing (PEK)", stand: "G1", bcb: "Belt 1", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 4, time: "06:10", flight: "GA 899", origin: "Guangzhou (CAN)", stand: "G3", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 5, time: "09:40", flight: "GA 825", origin: "Singapore (SIN)", stand: "G5", bcb: "Belt 4", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 6, time: "12:15", flight: "GA 827", origin: "Singapore (SIN)", stand: "G6", bcb: "Belt 4", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 7, time: "13:30", flight: "GA 867", origin: "Bangkok (BKK)", stand: "G7", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 8, time: "14:06", flight: "GA 821", origin: "Kuala Lumpur (KUL)", stand: "G2", bcb: "Belt 3", gh: "GAPURA", remarks: "Landed" },
+            { id: 9, time: "15:20", flight: "GA 879", origin: "Seoul Incheon (ICN)", stand: "G8", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 10, time: "16:15", flight: "GA 833", origin: "Singapore (SIN)", stand: "G4", bcb: "Belt 4", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 11, time: "17:45", flight: "GA 875", origin: "Tokyo Haneda (HND)", stand: "G1", bcb: "Belt 1", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 12, time: "18:50", flight: "GA 713", origin: "Sydney (SYD)", stand: "G9", bcb: "Belt 5", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 13, time: "19:30", flight: "GA 717", origin: "Melbourne (MEL)", stand: "G10", bcb: "Belt 5", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 14, time: "20:10", flight: "GA 861", origin: "Hong Kong (HKG)", stand: "G3", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 15, time: "21:15", flight: "GA 837", origin: "Singapore (SIN)", stand: "G5", bcb: "Belt 4", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 16, time: "22:40", flight: "GA 981", origin: "Jeddah (JED)", stand: "G11", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+
+            // Singapore Airlines
+            { id: 17, time: "07:40", flight: "SQ 950", origin: "Singapore (SIN)", stand: "G11", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 18, time: "09:55", flight: "SQ 952", origin: "Singapore (SIN)", stand: "G12", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 19, time: "11:55", flight: "SQ 956", origin: "Singapore (SIN)", stand: "G11", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 20, time: "14:40", flight: "SQ 958", origin: "Singapore (SIN)", stand: "G14", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 21, time: "17:05", flight: "SQ 962", origin: "Singapore (SIN)", stand: "G12", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 22, time: "18:05", flight: "SQ 964", origin: "Singapore (SIN)", stand: "G11", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 23, time: "20:15", flight: "SQ 966", origin: "Singapore (SIN)", stand: "G15", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 24, time: "22:35", flight: "SQ 968", origin: "Singapore (SIN)", stand: "G12", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+
+            // Etihad Airways
+            { id: 25, time: "14:25", flight: "EY 474", origin: "Abu Dhabi (AUH)", stand: "G16", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+            { id: 26, time: "22:10", flight: "EY 472", origin: "Abu Dhabi (AUH)", stand: "G16", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+
+            // Turkish Airlines
+            { id: 27, time: "17:35", flight: "TK 56", origin: "Istanbul (IST)", stand: "G17", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 28, time: "23:50", flight: "TK 58", origin: "Istanbul (IST)", stand: "G17", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+
+            // Emirates
+            { id: 29, time: "15:40", flight: "EK 356", origin: "Dubai (DXB)", stand: "G18", bcb: "Belt 6", gh: "JAS", remarks: "Scheduled" },
+            { id: 30, time: "22:15", flight: "EK 358", origin: "Dubai (DXB)", stand: "G18", bcb: "Belt 6", gh: "JAS", remarks: "Scheduled" },
+
+            // Qantas
+            { id: 31, time: "18:30", flight: "QF 41", origin: "Sydney (SYD)", stand: "G15", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+            { id: 32, time: "19:15", flight: "QF 39", origin: "Melbourne (MEL)", stand: "G14", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+
+            // Malaysia Airlines
+            { id: 33, time: "08:25", flight: "MH 711", origin: "Kuala Lumpur (KUL)", stand: "G6", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 34, time: "10:15", flight: "MH 713", origin: "Kuala Lumpur (KUL)", stand: "G7", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 35, time: "13:10", flight: "MH 717", origin: "Kuala Lumpur (KUL)", stand: "G6", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 36, time: "14:55", flight: "MH 721", origin: "Kuala Lumpur (KUL)", stand: "G8", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 37, time: "17:20", flight: "MH 723", origin: "Kuala Lumpur (KUL)", stand: "G7", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 38, time: "19:10", flight: "MH 725", origin: "Kuala Lumpur (KUL)", stand: "G6", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 39, time: "21:30", flight: "MH 727", origin: "Kuala Lumpur (KUL)", stand: "G8", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+
+            // XiamenAir
+            { id: 40, time: "13:45", flight: "MF 867", origin: "Xiamen (XMN)", stand: "G9", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 41, time: "21:05", flight: "MF 855", origin: "Fuzhou (FOC)", stand: "G10", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+
+            // China Southern Airlines
+            { id: 42, time: "12:40", flight: "CZ 387", origin: "Guangzhou (CAN)", stand: "G11", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 43, time: "19:45", flight: "CZ 3037", origin: "Guangzhou (CAN)", stand: "G12", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 44, time: "22:50", flight: "CZ 8353", origin: "Shenzhen (SZX)", stand: "G9", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+
+            // China Eastern Airlines
+            { id: 45, time: "01:25", flight: "MU 5069", origin: "Shanghai (PVG)", stand: "G10", bcb: "Belt 1", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 46, time: "21:20", flight: "MU 5071", origin: "Shanghai (PVG)", stand: "G11", bcb: "Belt 1", gh: "GAPURA", remarks: "Scheduled" },
+
+            // Cathay Pacific
+            { id: 47, time: "13:05", flight: "CX 777", origin: "Hong Kong (HKG)", stand: "G13", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 48, time: "19:55", flight: "CX 719", origin: "Hong Kong (HKG)", stand: "G14", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+            { id: 49, time: "22:55", flight: "CX 797", origin: "Hong Kong (HKG)", stand: "G13", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+
+            // Saudia
+            { id: 50, time: "09:10", flight: "SV 816", origin: "Jeddah (JED)", stand: "G19", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 51, time: "13:15", flight: "SV 818", origin: "Jeddah (JED)", stand: "G20", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 52, time: "16:40", flight: "SV 822", origin: "Madinah (MED)", stand: "G19", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 53, time: "21:45", flight: "SV 826", origin: "Riyadh (RUH)", stand: "G20", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+
+            // TransNusa (Internasional)
+            { id: 54, time: "11:45", flight: "8B 502", origin: "Kuala Lumpur (KUL)", stand: "R1", bcb: "Belt 1", gh: "JAS", remarks: "Scheduled" },
+            { id: 55, time: "15:10", flight: "8B 152", origin: "Singapore (SIN)", stand: "R2", bcb: "Belt 1", gh: "JAS", remarks: "Scheduled" },
+            { id: 56, time: "18:20", flight: "8B 506", origin: "Kuala Lumpur (KUL)", stand: "R3", bcb: "Belt 1", gh: "JAS", remarks: "Scheduled" },
+            { id: 57, time: "20:40", flight: "8B 861", origin: "Guangzhou (CAN)", stand: "R4", bcb: "Belt 1", gh: "JAS", remarks: "Scheduled" },
+
+            // Scoot
+            { id: 58, time: "08:50", flight: "TR 274", origin: "Singapore (SIN)", stand: "R5", bcb: "Belt 3", gh: "JAS", remarks: "Scheduled" },
+            { id: 59, time: "16:30", flight: "TR 276", origin: "Singapore (SIN)", stand: "R6", bcb: "Belt 3", gh: "JAS", remarks: "Scheduled" },
+            { id: 60, time: "21:55", flight: "TR 278", origin: "Singapore (SIN)", stand: "R5", bcb: "Belt 3", gh: "JAS", remarks: "Scheduled" },
+
+            // Spring Airlines
+            { id: 61, time: "01:40", flight: "9C 6211", origin: "Shanghai (PVG)", stand: "R7", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 62, time: "14:15", flight: "9C 8521", origin: "Guangzhou (CAN)", stand: "R8", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+
+            // SriLankan Airlines
+            { id: 63, time: "13:50", flight: "UL 364", origin: "Colombo (CMB)", stand: "G12", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+
+            // EVA Air
+            { id: 64, time: "13:40", flight: "BR 237", origin: "Taipei (TPE)", stand: "G15", bcb: "Belt 4", gh: "JAS", remarks: "Scheduled" },
+
+            // All Nippon Airways (ANA)
+            { id: 65, time: "00:15", flight: "NH 855", origin: "Tokyo Haneda (HND)", stand: "G16", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+            { id: 66, time: "16:05", flight: "NH 835", origin: "Tokyo Narita (NRT)", stand: "G17", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+            { id: 67, time: "17:25", flight: "NH 871", origin: "Tokyo Haneda (HND)", stand: "G16", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+
+            // Japan Airlines (JAL)
+            { id: 68, time: "16:50", flight: "JL 725", origin: "Tokyo Narita (NRT)", stand: "G14", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+            { id: 69, time: "23:45", flight: "JL 729", origin: "Tokyo Narita (NRT)", stand: "G15", bcb: "Belt 5", gh: "JAS", remarks: "Scheduled" },
+
+            // EgyptAir
+            { id: 70, time: "16:20", flight: "MS 977", origin: "Cairo (CAI)", stand: "G19", bcb: "Belt 6", gh: "GAPURA", remarks: "Scheduled" },
+
+            // Air China
+            { id: 71, time: "00:45", flight: "CA 977", origin: "Beijing (PEK)", stand: "G8", bcb: "Belt 1", gh: "GAPURA", remarks: "Scheduled" },
+            { id: 72, time: "20:30", flight: "CA 403", origin: "Chengdu (TFU)", stand: "G9", bcb: "Belt 1", gh: "GAPURA", remarks: "Scheduled" },
+
+            // China Airlines
+            { id: 73, time: "13:35", flight: "CI 761", origin: "Taipei (TPE)", stand: "G10", bcb: "Belt 2", gh: "GAPURA", remarks: "Scheduled" },
+
+            // Korean Air
+            { id: 74, time: "21:10", flight: "KE 627", origin: "Seoul Incheon (ICN)", stand: "G13", bcb: "Belt 3", gh: "GAPURA", remarks: "Scheduled" },
+
+            // Trinity Air / Charter & Regional International
+            { id: 75, time: "11:20", flight: "TRN 102", origin: "Singapore (SIN)", stand: "R9", bcb: "Belt 1", gh: "JAS", remarks: "Scheduled" },
+            { id: 76, time: "17:50", flight: "TRN 208", origin: "Kuala Lumpur (KUL)", stand: "R10", bcb: "Belt 1", gh: "JAS", remarks: "Scheduled" }
+        ];
+
+        let selectedItem = null;
+        let refreshClock = 0;
+        let lastMinute = -1;
+        let currentUser = null;
+        let historyUnsubscribe = null;
+        let isBoardMinimized = false;
+        let editingHistoryId = null; 
+        let currentHistoryLogs = []; 
+        let photos = { fibag: null, labag: null };
+
+        function parseCSV(text) {
+            const rows = [];
+            let row = [''];
+            let quotes = false;
+            for (let char of text) {
+                if (char === '"') quotes = !quotes;
+                else if (char === ',' && !quotes) row.push('');
+                else if (char === '\n' && !quotes) { rows.push(row); row = ['']; }
+                else if (char !== '\r') row[row.length - 1] += char;
+            }
+            if (row.length > 1 || row[0] !== '') rows.push(row);
+            return rows;
+        }
+
+        function normTime(t) {
+            if (!t) return "00:00";
+            const clean = t.replace(/[^\d:.]/g, '').replace('.', ':');
+            const p = clean.split(':');
+            const hh = (p[0] || '0').padStart(2, '0');
+            const mm = (p[1] || '00').padEnd(2, '0').substring(0,2);
+            return hh + ":" + mm;
+        }
+
+        function toMin(t) {
+            const p = normTime(t).split(':');
+            return parseInt(p[0]) * 60 + parseInt(p[1]);
+        }
+
+        function setNowTime(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const now = new Date();
+            const hh = now.getHours().toString().padStart(2, '0');
+            const mm = now.getMinutes().toString().padStart(2, '0');
+            el.value = hh + ":" + mm;
+            updateReport();
+        }
+
+        function calculateDensity(data) {
+            return data.map(item => {
+                const itemMin = toMin(item.time);
+                const density = data.filter(other => Math.abs(toMin(other.time) - itemMin) <= 30).length;
+                return { ...item, isBusy: density > BUSY_LIMIT };
+            });
+        }
+
+        function getFlightStatus(flight, time) {
+            const log = currentHistoryLogs.find(x => x.flight.toLowerCase() === flight.toLowerCase() && normTime(x.time) === normTime(time));
+            if (!log) return { code: 'WAITING', label: 'WAITING', class: 'status-waiting' };
+            const hasFibag = !!log.fibag;
+            const hasLabag = !!log.labag;
+            if (hasFibag && hasLabag) return { code: 'COMPLETED', label: 'SELESAI', class: 'status-active' };
+            else if (hasFibag || hasLabag) return { code: 'ON_PROGRESS', label: 'PROSES', class: 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse' };
+            return { code: 'WAITING', label: 'WAITING', class: 'status-waiting' };
+        }
+
+        function toggleFlightsBoard() {
+            const board = document.getElementById('mainContent');
+            const icon = document.getElementById('toggleBoardIcon');
+            isBoardMinimized = !isBoardMinimized;
+            if (isBoardMinimized) { board.classList.add('hidden'); icon.className = 'fas fa-chevron-down text-xs'; } 
+            else { board.classList.remove('hidden'); icon.className = 'fas fa-chevron-up text-xs'; }
+        }
+
+        function processRows(rows) {
+            if (rows.length < 1) return;
+            const h = rows[0].map(s => s.toLowerCase().trim());
+            const col = {
+                time: h.findIndex(s => s.includes('jam') || s.includes('aibt') || s.includes('time')),
+                flight: h.findIndex(s => s.includes('flight') || s.includes('no')),
+                origin: h.findIndex(s => s.includes('asal') || s.includes('origin')),
+                stand: h.findIndex(s => s.includes('stand') || s.includes('parkir')),
+                bcb: h.findIndex(s => s.includes('bcb') || s.includes('belt')),
+                gh: h.findIndex(s => s.includes('gh') || s.includes('handling') || s.includes('ground')),
+                remarks: h.findIndex(s => s.includes('rem') || s.includes('ket'))
+            };
+
+            const parsed = rows.slice(1).filter(r => r[col.time]).map((r, i) => ({
+                id: i, 
+                time: (r[col.time] || '').trim(),
+                flight: (r[col.flight] || '').trim(),
+                origin: (r[col.origin] || '').trim(),
+                stand: (r[col.stand] || '').trim(),
+                bcb: (r[col.bcb] || '').trim(),
+                gh: col.gh >= 0 ? (r[col.gh] || '').trim() : '',
+                remarks: col.remarks >= 0 ? (r[col.remarks] || '').trim() : '',
+                source: "CSV"
+            }));
+
+            if (allData.length === 0) {
+                allData = parsed;
+            } else {
+                parsed.forEach(p => {
+                    const exists = allData.find(d => d.flight.toUpperCase().replace(/\s/g, "") === p.flight.toUpperCase().replace(/\s/g, ""));
+                    if (!exists) allData.push(p);
+                });
+            }
+
+            allData = calculateDensity(allData);
+            sortAndRender();
+        }
+
+        async function fetchFlightData() {
+            const icon = document.getElementById('syncIcon');
+            if(icon) icon.classList.add('fa-spin');
+            refreshClock = 0;
+            try {
+                const res = await fetch(`${CSV_URL}&t=${Date.now()}`);
+                if (!res.ok) throw new Error("Gagal mengambil data");
+                const text = await res.text();
+                processRows(parseCSV(text));
+                const syncEl = document.getElementById('lastSync');
+                if(syncEl) syncEl.innerText = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            } catch (e) { 
+                console.error("Gagal sinkronisasi", e); 
+                sortAndRender();
+            } finally { 
+                if(icon) icon.classList.remove('fa-spin'); 
+            }
+        }
+
+        function render(data, currentHHMM) {
+            const tbody = document.getElementById('tbody');
+            const mobile = document.getElementById('mobileCards');
+            const loader = document.getElementById('loader');
+            const empty = document.getElementById('emptyState');
+
+            if (loader) loader.classList.add('hidden');
+            const statTotal = document.getElementById('statTotal');
+            const statLanded = document.getElementById('statLanded');
+            if (statTotal) statTotal.innerText = allData.length;
+            if (statLanded) statLanded.innerText = allData.filter(f => ((f.bcb || '').toLowerCase().includes('belt') || (f.bcb || '').toLowerCase().includes('tiba'))).length;
+
+            if (data.length === 0) { 
+                if (tbody) tbody.innerHTML = ''; 
+                if (mobile) mobile.innerHTML = ''; 
+                if (empty) empty.classList.remove('hidden'); 
+                return; 
+            }
+            if (empty) empty.classList.add('hidden');
+
+            if (tbody) {
+                tbody.innerHTML = data.map(f => {
+                    const isNow = normTime(f.time) === currentHHMM;
+                    const status = getFlightStatus(f.flight, f.time);
+                    const displayAibt = normTime(f.time);
+                    const displayStand = f.stand || "-";
+                    const displayBcb = f.bcb || "-";
+                    const displayRemarks = f.remarks || "-";
+                    const isGoogle = f.source === "GoogleGrounding";
+
+                    return `
+                    <tr class="${isNow ? 'live-row' : 'hover:bg-slate-800/40'} cursor-pointer transition-all" onclick="openModalByRef('${f.flight}', '${f.time}')">
+                        <td class="px-6 py-4 font-bold">
+                            <div class="flex flex-col">
+                                <span class="flex items-center gap-2">
+                                    ${f.isBusy ? '<i class="fas fa-fire busy-indicator text-amber-500"></i>' : ''}
+                                    ${displayAibt}
+                                </span>
+                                ${isNow ? '<span class="live-tag w-fit mt-1">LIVE</span>' : ''}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="bg-slate-800 text-yellow-400 px-2 py-1 rounded font-mono font-bold text-xs border border-slate-700">
+                                ${f.flight}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 font-bold text-slate-300 text-[11px] uppercase">${f.origin}</td>
+                        <td class="px-6 py-4 text-center font-black text-emerald-400">${displayStand}</td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="status-badge ${displayBcb.toLowerCase().includes('belt') ? 'status-active' : 'status-waiting'}">
+                                ${displayBcb}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-center"><span class="status-badge ${status.class}">${status.label}</span></td>
+                        <td class="px-6 py-4 text-xs italic ${isGoogle ? 'text-emerald-400 font-bold' : 'text-slate-400'}">
+                            ${displayRemarks}
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+
+            if (mobile) {
+                mobile.innerHTML = data.map(f => {
+                    const isNow = normTime(f.time) === currentHHMM;
+                    const status = getFlightStatus(f.flight, f.time);
+
+                    return `
+                    <div class="mobile-card ${isNow ? 'live-row' : ''}" onclick="openModalByRef('${f.flight}', '${f.time}')">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-3">
+                                <span class="font-black text-xl flex flex-col">
+                                    <span class="flex items-center gap-1.5">${f.isBusy ? '<i class="fas fa-fire busy-indicator text-sm"></i>' : ''}${normTime(f.time)}</span>
+                                    ${isNow ? '<span class="live-tag w-fit">LIVE</span>' : ''}
+                                </span>
+                                <span class="bg-slate-800 text-yellow-400 px-2 py-0.5 rounded font-mono font-bold text-[10px] border border-slate-700">${f.flight}</span>
+                            </div>
+                            <div class="flex flex-col items-end gap-1">
+                                <span class="status-badge ${(f.bcb || '').toLowerCase().includes('belt') ? 'status-active' : 'status-waiting'} scale-90">${f.bcb || '-'}</span>
+                                <span class="status-badge ${status.class} scale-90">${status.label}</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div class="space-y-0.5">
+                                <p class="text-[9px] font-bold text-slate-500 uppercase">Asal</p>
+                                <p class="font-bold text-slate-200 text-xs uppercase">${f.origin}</p>
+                            </div>
+                            <div class="text-right space-y-0.5"><p class="text-[9px] font-bold text-slate-500 uppercase">Stand</p><p class="font-black text-emerald-400 text-sm">${f.stand || '-'}</p></div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        function sortAndRender() {
+            const now = new Date();
+            const currentHHMM = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+            const searchInput = document.getElementById('searchInput');
+            const term = searchInput ? searchInput.value.toLowerCase() : "";
+
+            const sorted = [...allData].sort((a, b) => {
+                const tA = normTime(a.time);
+                const tB = normTime(b.time);
+                const isNowA = tA === currentHHMM;
+                const isNowB = tB === currentHHMM;
+                if (isNowA && !isNowB) return -1;
+                if (!isNowA && isNowB) return 1;
+                if (tA !== tB) return tA.localeCompare(tB);
+                return b.id - a.id;
+            });
+
+            const filtered = sorted.filter(f => f.flight.toLowerCase().includes(term) || f.origin.toLowerCase().includes(term) || (f.stand || '').toLowerCase().includes(term));
+            render(filtered, currentHHMM);
+        }
+
+        function openModalByRef(flight, time) {
+            selectedItem = allData.find(f => f.flight === flight && f.time === time);
+            if (!selectedItem) return;
+            
+            editingHistoryId = null; 
+            
+            const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; }
+            const setHTML = (id, val) => { const el = document.getElementById(id); if(el) el.innerHTML = val; }
+            
+            setHTML('modalTitle', "Editor Laporan");
+            setVal('inOfficer', "NURUL HIDAYAT");
+            setVal('inArea', "T3 CGK-International");
+            setVal('inGH', selectedItem.gh || "");
+            setVal('inStand', selectedItem.stand || "");
+            setVal('inBcb', selectedItem.bcb || "");
+            setVal('inReason', "");
+            setVal('inFibag', "");
+            setVal('inLabag', "");
+            setHTML('uiStatusFibag', "");
+            setHTML('uiStatusLabag', "");
+
+            clearPhoto('fibag', true);
+            clearPhoto('labag', true);
+
+            const aibtNorm = normTime(time);
+            if (flight.toUpperCase().replace(/\s/g, "") === "GA821") {
+                setVal('inAibt', "14:06");
+                setVal('inStand', "G2");
+                setVal('inBcb', "Belt 3");
+                setVal('inGH', selectedItem.gh || "GAPURA");
+            } else {
+                setVal('inAibt', aibtNorm);
+            }
+
+            updateReport();
+            const modal = document.getElementById('reportModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function editHistoryReport(id) {
+            const item = currentHistoryLogs.find(x => x.id === id);
+            if (!item) return;
+            
+            selectedItem = {
+                flight: item.flight, time: item.time, stand: item.stand || "",
+                origin: item.origin || "", bcb: item.bcb || "", remarks: item.remarks || "", gh: item.gh || ""
+            };
+            
+            editingHistoryId = item.id;
+            const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; }
+            const setHTML = (id, val) => { const el = document.getElementById(id); if(el) el.innerHTML = val; }
+
+            setHTML('modalTitle', "Edit Laporan Riwayat");
+            setVal('inOfficer', item.officer || "NURUL HIDAYAT");
+            setVal('inArea', item.area || "T3 CGK-International");
+            setVal('inGH', item.gh || "");
+            setVal('inStand', item.stand || "");
+            setVal('inBcb', item.bcb || "");
+            setVal('inAibt', normTime(item.time));
+            setVal('inFibag', item.fibag || "");
+            setVal('inLabag', item.labag || "");
+            setVal('inReason', item.selectedReason || "");
+
+            if (item.photoFibag) {
+                photos.fibag = item.photoFibag;
+                const prev = document.getElementById('prevFibag');
+                const btn = document.getElementById('btnDelFibag');
+                if(prev) { prev.src = item.photoFibag; prev.classList.remove('hidden'); }
+                if(btn) btn.classList.remove('hidden');
+            } else { clearPhoto('fibag', true); }
+
+            if (item.photoLabag) {
+                photos.labag = item.photoLabag;
+                const prev = document.getElementById('prevLabag');
+                const btn = document.getElementById('btnDelLabag');
+                if(prev) { prev.src = item.photoLabag; prev.classList.remove('hidden'); }
+                if(btn) btn.classList.remove('hidden');
+            } else { clearPhoto('labag', true); }
+
+            updateReport();
+            const modal = document.getElementById('reportModal');
+            if(modal) {
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeModal() { 
+            const modal = document.getElementById('reportModal');
+            if(modal) modal.classList.add('hidden'); 
+            document.body.style.overflow = ''; 
+            editingHistoryId = null;
+        }
+
+        function updateReport() {
+            if (!selectedItem) return;
+            const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : "";
+            
+            const off = getVal('inOfficer') || ".......";
+            const areaVal = getVal('inArea') || ".......";
+            const gh = getVal('inGH') || ".......";
+            const standVal = getVal('inStand') || ".......";
+            const bcbVal = getVal('inBcb') || ".......";
+            const aibtTime = getVal('inAibt');
+            const fv = getVal('inFibag');
+            const lv = getVal('inLabag');
+            const reasonDrop = getVal('inReason');
+            
+            const aM = toMin(aibtTime);
+            const fM = toMin(fv);
+            const lM = toMin(lv);
+            let fS = "", lS = "", ov = "Achieve";
+            
+            const uiStatusFibag = document.getElementById('uiStatusFibag');
+            const uiStatusLabag = document.getElementById('uiStatusLabag');
+            if(uiStatusFibag) uiStatusFibag.innerHTML = "";
+            if(uiStatusLabag) uiStatusLabag.innerHTML = "";
+            
+            if (fv && aibtTime) { 
+                let diffF = fM - aM;
+                if (diffF < -720) diffF += 1440;
+                if (diffF > 15) { 
+                    fS = " (Not Achieve)"; ov = "Not Achieve"; 
+                    if(uiStatusFibag) uiStatusFibag.innerHTML = '<span class="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">NOT ACHIEVE</span>';
+                } else { 
+                    fS = " (Achieve)"; 
+                    if(uiStatusFibag) uiStatusFibag.innerHTML = '<span class="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">ACHIEVE</span>';
+                }
+            }
+            if (lv && aibtTime) { 
+                let diffL = lM - aM;
+                if (diffL < -720) diffL += 1440;
+                if (diffL > 30) { 
+                    lS = " (Not Achieve)"; ov = "Not Achieve"; 
+                    if(uiStatusLabag) uiStatusLabag.innerHTML = '<span class="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">NOT ACHIEVE</span>';
+                } else { 
+                    lS = " (Achieve)"; 
+                    if(uiStatusLabag) uiStatusLabag.innerHTML = '<span class="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">ACHIEVE</span>';
+                }
+            }
+            
+            let finalReason = ov;
+            if (ov === "Not Achieve" && reasonDrop) finalReason += ` - ${reasonDrop}`;
+            
+            let fibagPhotoLink = '', labagPhotoLink = '';
+            if (editingHistoryId) {
+                const baseUrl = window.location.origin + window.location.pathname;
+                if (photos.fibag) fibagPhotoLink = `\n📸 Link Foto FIBAG: ${baseUrl}?view=${editingHistoryId}&type=fibag`;
+                if (photos.labag) labagPhotoLink = `\n📸 Link Foto LASTBAG: ${baseUrl}?view=${editingHistoryId}&type=labag`;
+            } else {
+                if (photos.fibag) fibagPhotoLink = `\n📸 Link Foto FIBAG: [Foto terlampir - Link dibuat otomatis saat dikirim]`;
+                if (photos.labag) labagPhotoLink = `\n📸 Link Foto LASTBAG: [Foto terlampir - Link dibuat otomatis saat dikirim]`;
+            }
+
+            const date = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            const outputEl = document.getElementById('reportOutput');
+            if(outputEl) {
+                outputEl.value = `*REPORT PENGINPUTAN FIBAG LASTBAG T3 – CGK*
+Hari/tgl : ${date}
+Petugas : ${off}
+Area : ${areaVal}
+Ground Handling : ${gh}
+Flight : ${selectedItem.flight}
+Parking stand : ${standVal}
+Origin : ${selectedItem.origin}
+BCB no: ${bcbVal}
+AIBT: ${aibtTime || "......."}
+Fibag : ${fv || "......."}${fS}${fibagPhotoLink}
+Labag : ${lv || "......."}${lS}${labagPhotoLink}
+Reason : ${finalReason}${selectedItem.remarks ? ' (' + selectedItem.remarks + ')' : ''}`;
+            }
+        }
+
+        async function saveData(shouldCopy) {
+            const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : "";
+            const officer = getVal('inOfficer') || "NURUL HIDAYAT";
+            const areaVal = getVal('inArea') || "T3 CGK-International";
+            const gh = getVal('inGH') || "";
+            const aibtTime = getVal('inAibt') || "";
+            const fv = getVal('inFibag') || "";
+            const lv = getVal('inLabag') || "";
+            const standVal = getVal('inStand') || "";
+            const bcbVal = getVal('inBcb') || "";
+            const reasonDrop = getVal('inReason') || "";
+
+            showToast("Menyimpan ke Database...");
+            let docId = editingHistoryId;
+            let reportText = "";
+
+            if (currentUser && selectedItem) {
+                try {
+                    if (docId) {
+                        const docRefVal = doc(db, 'artifacts', appId, 'public', 'data', 'history', docId);
+                        await updateDoc(docRefVal, {
+                            flight: selectedItem.flight, time: aibtTime, officer: officer, area: areaVal,
+                            gh: gh, fibag: fv, labag: lv, stand: standVal, origin: selectedItem.origin || "",
+                            bcb: bcbVal, remarks: selectedItem.remarks || "", selectedReason: reasonDrop,
+                            photoFibag: photos.fibag, photoLabag: photos.labag
+                        });
+                    } else {
+                        const historyCol = collection(db, 'artifacts', appId, 'public', 'data', 'history');
+                        const newDoc = await addDoc(historyCol, {
+                            timestamp: new Date().toISOString(), flight: selectedItem.flight, time: aibtTime,
+                            officer: officer, area: areaVal, gh: gh, fibag: fv, labag: lv, stand: standVal,
+                            origin: selectedItem.origin || "", bcb: bcbVal, remarks: selectedItem.remarks || "",
+                            selectedReason: reasonDrop, photoFibag: photos.fibag, photoLabag: photos.labag, userId: currentUser.uid
+                        });
+                        docId = newDoc.id;
+                    }
+
+                    const date = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                    const aM = toMin(aibtTime); const fM = toMin(fv); const lM = toMin(lv);
+                    let fS = "", lS = "", ov = "Achieve";
+                    
+                    if (fv && aibtTime) { let diffF = fM - aM; if (diffF < -720) diffF += 1440; if (diffF > 15) { fS = " (Not Achieve)"; ov = "Not Achieve"; } else fS = " (Achieve)"; }
+                    if (lv && aibtTime) { let diffL = lM - aM; if (diffL < -720) diffL += 1440; if (diffL > 30) { lS = " (Not Achieve)"; ov = "Not Achieve"; } else lS = " (Achieve)"; }
+
+                    let finalReason = ov;
+                    if (ov === "Not Achieve" && reasonDrop) finalReason += ` - ${reasonDrop}`;
+
+                    const baseUrl = window.location.origin + window.location.pathname;
+                    let fibagPhotoLink = photos.fibag ? `\n📸 Link Foto FIBAG: ${baseUrl}?view=${docId}&type=fibag` : '';
+                    let labagPhotoLink = photos.labag ? `\n📸 Link Foto LASTBAG: ${baseUrl}?view=${docId}&type=labag` : '';
+
+                    reportText = `*REPORT PENGINPUTAN FIBAG LASTBAG T3 – CGK*\nHari/tgl : ${date}\nPetugas : ${officer}\nArea : ${areaVal}\nGround Handling : ${gh}\nFlight : ${selectedItem.flight}\nParking stand : ${standVal}\nOrigin : ${selectedItem.origin}\nBCB no: ${bcbVal}\nAIBT: ${aibtTime || "......."}\nFibag : ${fv || "......."}${fS}${fibagPhotoLink}\nLabag : ${lv || "......."}${lS}${labagPhotoLink}\nReason : ${finalReason}${selectedItem.remarks ? ' (' + selectedItem.remarks + ')' : ''}`;
+
+                    const finalDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', docId);
+                    await updateDoc(finalDocRef, { reportText: reportText });
+                } catch (e) {
+                    showToast("Gagal memproses data ke database Cloud.");
+                    reportText = document.getElementById('reportOutput').value;
+                }
+            } else {
+                reportText = document.getElementById('reportOutput').value;
+            }
+
+            if (shouldCopy) {
+                const dummy = document.createElement("textarea"); document.body.appendChild(dummy);
+                dummy.value = reportText; dummy.select(); document.execCommand('copy'); document.body.removeChild(dummy);
+                showToast("Laporan Lengkap & Link Foto Disalin!");
+            } else { showToast("Laporan Berhasil Disimpan!"); }
+
+            const localFlightIndex = allData.findIndex(f => f.flight === selectedItem.flight && f.time === selectedItem.time);
+            if (localFlightIndex >= 0) { allData[localFlightIndex].stand = standVal; allData[localFlightIndex].bcb = bcbVal; }
+            setTimeout(() => { closeModal(); sortAndRender(); }, 800);
+        }
+
+        async function shareDirectlyToSystem() {
+            const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : "";
+            const officer = getVal('inOfficer') || "NURUL HIDAYAT";
+            const areaVal = getVal('inArea') || "T3 CGK-International";
+            const gh = getVal('inGH') || "";
+            const aibtTime = getVal('inAibt') || "";
+            const fv = getVal('inFibag') || "";
+            const lv = getVal('inLabag') || "";
+            const standVal = getVal('inStand') || "";
+            const bcbVal = getVal('inBcb') || "";
+            const reasonDrop = getVal('inReason') || "";
+
+            showToast("Menyiapkan dokumen & file foto HP...");
+
+            const date = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            const aM = toMin(aibtTime);
+            const fM = toMin(fv);
+            const lM = toMin(lv);
+            let fS = "", lS = "", ov = "Achieve";
+            
+            if (fv && aibtTime) { 
+                let diffF = fM - aM;
+                if (diffF < -720) diffF += 1440;
+                if (diffF > 15) { fS = " (Not Achieve)"; ov = "Not Achieve"; } 
+                else fS = " (Achieve)"; 
+            }
+            if (lv && aibtTime) { 
+                let diffL = lM - aM;
+                if (diffL < -720) diffL += 1440;
+                if (diffL > 30) { lS = " (Not Achieve)"; ov = "Not Achieve"; } 
+                else lS = " (Achieve)"; 
+            }
+
+            let finalReason = ov;
+            if (ov === "Not Achieve" && reasonDrop) finalReason += ` - ${reasonDrop}`;
+
+            const cleanReportText = `*REPORT PENGINPUTAN FIBAG LASTBAG T3 – CGK*
+Hari/tgl : ${date}
+Petugas : ${officer}
+Area : ${areaVal}
+Ground Handling : ${gh}
+Flight : ${selectedItem ? selectedItem.flight : ''}
+Parking stand : ${standVal}
+Origin : ${selectedItem ? selectedItem.origin : ''}
+BCB no: ${bcbVal}
+AIBT: ${aibtTime || "......."}
+Fibag : ${fv || "......."}${fS}${photos.fibag ? ' (Foto Terlampir)' : ''}
+Labag : ${lv || "......."}${lS}${photos.labag ? ' (Foto Terlampir)' : ''}
+Reason : ${finalReason}${selectedItem && selectedItem.remarks ? ' (' + selectedItem.remarks + ')' : ''}`;
+
+            const filesArray = [];
+
+            async function base64ToFileObj(base64Data, filename) {
+                const response = await fetch(base64Data);
+                const blob = await response.blob();
+                return new File([blob], filename, { type: "image/jpeg" });
+            }
+
+            try {
+                if (photos.fibag) {
+                    const fileF = await base64ToFileObj(photos.fibag, `FIBAG_${(selectedItem ? selectedItem.flight : 'REPORT').replace(/\s+/g, '')}.jpg`);
+                    filesArray.push(fileF);
+                }
+                if (photos.labag) {
+                    const fileL = await base64ToFileObj(photos.labag, `LASTBAG_${(selectedItem ? selectedItem.flight : 'REPORT').replace(/\s+/g, '')}.jpg`);
+                    filesArray.push(fileL);
+                }
+
+                if (navigator.canShare && filesArray.length > 0 && navigator.canShare({ files: filesArray })) {
+                    await navigator.share({
+                        files: filesArray,
+                        text: cleanReportText,
+                        title: `Laporan FIDS T3 - ${selectedItem ? selectedItem.flight : ''}`
+                    });
+                    showToast("Membuka pilihan sistem share HP...");
+                } else if (navigator.share) {
+                    await navigator.share({
+                        text: cleanReportText,
+                        title: `Laporan FIDS T3 - ${selectedItem ? selectedItem.flight : ''}`
+                    });
+                    showToast("Membuka pilihan sistem share HP...");
+                } else {
+                    const dummy = document.createElement("textarea");
+                    document.body.appendChild(dummy);
+                    dummy.value = cleanReportText;
+                    dummy.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(dummy);
+                    showToast("Web Share tidak didukung. Teks laporan disalin!");
+                }
+            } catch (err) {
+                console.error("Gagal membagikan file bawaan HP:", err);
+                showToast("Pengiriman file dibatalkan.");
+            }
+        }
+
+        function renderHistory(logs) {
+            const tbody = document.getElementById('historyTbody');
+            const mobile = document.getElementById('mobileHistoryCards');
+            const empty = document.getElementById('historyEmptyState');
+            if (logs.length === 0) {
+                if(tbody) tbody.innerHTML = '';
+                if(mobile) mobile.innerHTML = '';
+                if(empty) empty.classList.remove('hidden');
+                return;
+            }
+            if(empty) empty.classList.add('hidden');
+
+            if(tbody) {
+                tbody.innerHTML = logs.map(item => {
+                    const saveDate = item.timestamp ? new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                    const hasFibagPhoto = !!item.photoFibag; const hasLabagPhoto = !!item.photoLabag;
+                    return `
+                    <tr class="hover:bg-slate-800/40 transition-colors text-xs text-slate-300">
+                        <td class="px-6 py-3 font-semibold text-slate-500">${saveDate}</td>
+                        <td class="px-6 py-3 font-bold text-slate-100">${item.flight || '-'}</td>
+                        <td class="px-6 py-3 text-emerald-400 font-bold">${item.stand || '-'}</td>
+                        <td class="px-6 py-3 font-semibold text-slate-400">${item.bcb || '-'}</td>
+                        <td class="px-6 py-3">${item.time || '-'}</td>
+                        <td class="px-6 py-3 text-emerald-400 font-semibold">${item.fibag || '-'}</td>
+                        <td class="px-6 py-3 text-cyan-400 font-semibold">${item.labag || '-'}</td>
+                        <td class="px-6 py-3"><div class="flex gap-2">
+                                ${hasFibagPhoto ? `<button onclick="viewPhotoFromHistory('${item.id}', 'fibag')" class="text-emerald-400 bg-emerald-500/10 p-1 rounded-md text-[10px] hover:bg-emerald-500/20 active:scale-95"><i class="fas fa-camera"></i> FIBAG</button>` : ''}
+                                ${hasLabagPhoto ? `<button onclick="viewPhotoFromHistory('${item.id}', 'labag')" class="text-indigo-400 bg-indigo-500/10 p-1 rounded-md text-[10px] hover:bg-indigo-500/20 active:scale-95"><i class="fas fa-camera"></i> LASTBAG</button>` : ''}
+                                ${!hasFibagPhoto && !hasLabagPhoto ? '<span class="text-slate-600">-</span>' : ''}
+                            </div></td>
+                        <td class="px-6 py-3 text-center flex justify-center gap-2">
+                            <button onclick="editHistoryReport('${item.id}')" class="text-amber-400 hover:text-amber-100 bg-amber-500/10 p-1.5 rounded-lg active:scale-90 font-bold text-[10px]"><i class="fas fa-edit"></i> EDIT</button>
+                            <button onclick="copyReportById('${item.id}')" class="text-cyan-400 hover:text-cyan-100 bg-cyan-500/10 p-1.5 rounded-lg active:scale-90 font-bold text-[10px]"><i class="fas fa-copy"></i> SALIN</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+
+            if(mobile) {
+                mobile.innerHTML = logs.map(item => {
+                    const saveDate = item.timestamp ? new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                    const hasFibagPhoto = !!item.photoFibag; const hasLabagPhoto = !!item.photoLabag;
+                    return `
+                    <div class="mobile-card">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-2"><span class="font-extrabold text-cyan-400 text-sm">${item.flight || '-'}</span><span class="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">${saveDate}</span></div>
+                            <div class="flex gap-1.5">
+                                <button onclick="editHistoryReport('${item.id}')" class="bg-amber-600 text-white p-2 rounded-xl text-xs active:scale-95 flex items-center gap-1"><i class="fas fa-edit text-[10px]"></i> <span class="font-bold text-[10px]">EDIT</span></button>
+                                <button onclick="copyReportById('${item.id}')" class="bg-indigo-600 text-white p-2 rounded-xl text-xs active:scale-95 flex items-center gap-1"><i class="fas fa-copy text-[10px]"></i> <span class="font-bold text-[10px]">SALIN</span></button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-900 p-2 rounded-lg text-slate-400 font-semibold border border-slate-800 mb-2">
+                            <div>STAND: <span class="text-emerald-400 font-bold">${item.stand || '-'}</span></div><div>BCB: <span class="text-yellow-400 font-bold">${item.bcb || '-'}</span></div>
+                            <div>AIBT: <span class="font-black text-slate-200">${item.time || '-'}</span></div><div>FIBAG: <span class="text-emerald-400 font-black">${item.fibag || '-'}</span></div>
+                        </div>
+                        ${hasFibagPhoto || hasLabagPhoto ? `
+                        <div class="flex gap-2 pt-1 border-t border-slate-800">
+                            ${hasFibagPhoto ? `<button onclick="viewPhotoFromHistory('${item.id}', 'fibag')" class="text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-[9px] flex items-center gap-1"><i class="fas fa-camera"></i> Foto FIBAG</button>` : ''}
+                            ${hasLabagPhoto ? `<button onclick="viewPhotoFromHistory('${item.id}', 'labag')" class="text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded text-[9px] flex items-center gap-1"><i class="fas fa-camera"></i> Foto LASTBAG</button>` : ''}
+                        </div>` : ''}
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        function compressAndUploadPhoto(input, type) {
+            const file = input.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                    const MAX_WIDTH = 400; let width = img.width, height = img.height;
+                    if (width > MAX_WIDTH) { height = Math.round((height * MAX_WIDTH) / width); width = MAX_WIDTH; }
+                    canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
+                    photos[type] = compressedBase64;
+                    const prevElement = document.getElementById(`prev${type.charAt(0).toUpperCase() + type.slice(1)}`);
+                    const delButton = document.getElementById(`btnDel${type.charAt(0).toUpperCase() + type.slice(1)}`);
+                    if (prevElement) { prevElement.src = compressedBase64; prevElement.classList.remove('hidden'); }
+                    if (delButton) delButton.classList.remove('hidden');
+                    updateReport();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearPhoto(type, silent = false) {
+            photos[type] = null;
+            const prevElement = document.getElementById(`prev${type.charAt(0).toUpperCase() + type.slice(1)}`);
+            const delButton = document.getElementById(`btnDel${type.charAt(0).toUpperCase() + type.slice(1)}`);
+            if (prevElement) { prevElement.src = ""; prevElement.classList.add('hidden'); }
+            if (delButton) delButton.classList.add('hidden');
+            const inputElement = document.getElementById(`${type}FileInput`);
+            if (inputElement) inputElement.value = "";
+            updateReport();
+        }
+
+        function viewPhoto(src) {
+            const lightbox = document.getElementById('lightbox'); const lightboxImg = document.getElementById('lightboxImg');
+            if (lightbox && lightboxImg) { lightboxImg.src = src; lightbox.classList.remove('hidden'); }
+        }
+
+        function viewPhotoFromHistory(id, type) {
+            const item = currentHistoryLogs.find(x => x.id === id);
+            if (!item) return; const photoSrc = type === 'fibag' ? item.photoFibag : item.photoLabag;
+            if (photoSrc) viewPhoto(photoSrc);
+        }
+
+        function copyOriginalReport(rawText) {
+            const dummy = document.createElement("textarea"); document.body.appendChild(dummy);
+            dummy.value = rawText; dummy.select(); document.execCommand("copy"); document.body.removeChild(dummy);
+            showToast("Salinan Laporan Di-Copy Ulang!");
+        }
+
+        function copyReportById(id) {
+            const item = currentHistoryLogs.find(x => x.id === id);
+            if (item && item.reportText) copyOriginalReport(item.reportText);
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            if (t) { t.innerText = msg; t.style.opacity = '1'; setTimeout(() => t.style.opacity = '0', 2500); }
+        }
+
+        function tick() {
+            const now = new Date(); const min = now.getMinutes();
+            const clockEl = document.getElementById('digitalClock');
+            const dateEl = document.getElementById('currentDate');
+            if(clockEl) clockEl.innerText = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            if(dateEl) dateEl.innerText = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' });
+            if (min !== lastMinute) { sortAndRender(); lastMinute = min; }
+            refreshClock++; const p = (refreshClock / REFRESH_RATE) * 100;
+            const pb = document.getElementById('refresh-progress'); if (pb) pb.style.width = `${p}%`;
+            if (refreshClock >= REFRESH_RATE) fetchFlightData();
+        }
+
+        // Export to Window
+        window.closeModal = closeModal;
+        window.openModalByRef = openModalByRef;
+        window.setNowTime = setNowTime;
+        window.updateReport = updateReport;
+        window.saveData = saveData;
+        window.shareDirectlyToSystem = shareDirectlyToSystem;
+        window.copyOriginalReport = copyOriginalReport;
+        window.copyReportById = copyReportById;
+        window.manualRefresh = fetchFlightData;
+        window.toggleFlightsBoard = toggleFlightsBoard;
+        window.editHistoryReport = editHistoryReport;
+        window.compressAndUploadPhoto = compressAndUploadPhoto;
+        window.clearPhoto = clearPhoto;
+        window.viewPhoto = viewPhoto;
+        window.viewPhotoFromHistory = viewPhotoFromHistory;
+
+        window.onload = () => {
+            const searchInput = document.getElementById('searchInput');
+            if(searchInput) searchInput.addEventListener('input', () => sortAndRender());
+            
+            sortAndRender(); 
+            fetchFlightData(); 
+            setInterval(tick, 1000); 
+            tick();
+
+            const initAuthAndSync = async () => {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+                else await signInAnonymously(auth);
+            };
+
+            initAuthAndSync().catch(console.error);
+            onAuthStateChanged(auth, (user) => {
+                currentUser = user;
+                if (user) {
+                    const historyCol = collection(db, 'artifacts', appId, 'public', 'data', 'history');
+                    if (historyUnsubscribe) historyUnsubscribe();
+                    historyUnsubscribe = onSnapshot(historyCol, (snapshot) => {
+                        const list = []; snapshot.forEach(doc => { list.push({ id: doc.id, ...doc.data() }); });
+                        list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+                        currentHistoryLogs = list; renderHistory(list); sortAndRender(); 
+                    });
+                }
+            });
+        };
+    </script>
+</body>
+</html>
+```
